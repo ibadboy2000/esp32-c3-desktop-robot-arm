@@ -266,6 +266,7 @@ const char* web_ui_html = R"rawliteral(
             <span id="gamepad-status">🎮 未连接</span>
         </div>
         <div class="wifi-info">
+            <span id="wake-status" onclick="reqWakeLock()" style="cursor:pointer" title="点击尝试屏幕常亮">💡 --</span>
             <span id="wifi-rssi">📶 --</span>
             <span id="wifi-uptime">⏱ 0s</span>
         </div>
@@ -576,19 +577,63 @@ function startBind(id) {
 // 页面加载时读取配置
 loadMapping();
 
+// ===== 屏幕常亮 (Wake Lock API) =====
+let wakeLock = null;
+async function reqWakeLock() {
+    if ('wakeLock' in navigator) {
+        try {
+            wakeLock = await navigator.wakeLock.request('screen');
+            document.getElementById('wake-status').innerText = '💡 常亮';
+            document.getElementById('wake-status').style.color = 'var(--success)';
+            wakeLock.addEventListener('release', () => {
+                document.getElementById('wake-status').innerText = '💡 解除';
+                document.getElementById('wake-status').style.color = '';
+                wakeLock = null;
+            });
+        } catch (err) {
+            document.getElementById('wake-status').innerText = '💡 失败';
+        }
+    } else {
+        document.getElementById('wake-status').innerText = '💡 不支持';
+        document.getElementById('wake-status').title = '您的浏览器不支持WakeLock API';
+    }
+}
+// 切回前台时自动重新请求
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') reqWakeLock();
+});
+// 首次交互自动请求
+document.addEventListener('click', () => { if(!wakeLock) reqWakeLock(); }, {once:true});
+document.addEventListener('touchstart', () => { if(!wakeLock) reqWakeLock(); }, {once:true});
+
 // ===== 核心API =====
 let reqSeq = Date.now();
+let apiInFlight = false;
+let apiQueue = null;
+
+function processApiQueue() {
+    if (apiInFlight || !apiQueue) return;
+    let req = apiQueue;
+    apiQueue = null;
+    apiInFlight = true;
+    
+    fetch('/api/control', {
+        method:'POST', headers:{'Content-Type':'application/json'},
+        body: JSON.stringify(req)
+    }).then(r=>{if(!r.ok)console.error('API error');}).catch(e=>{
+        setOffline();
+    }).finally(()=>{
+        apiInFlight = false;
+        if(apiQueue) processApiQueue();
+    });
+}
 
 function sendApi(device, action, speed, duration) {
     speed = speed || 255; duration = duration || 0;
-    
     let seq = reqSeq++;
-    fetch('/api/control', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({device,action,speed,duration,seq})
-    }).then(r=>{if(!r.ok)console.error('API error');}).catch(e=>{
-        setOffline();
-    });
+    
+    apiQueue = {device, action, speed, duration, seq};
+    processApiQueue();
 }
 
 // ===== 网页按钮控制 =====
@@ -606,7 +651,7 @@ function webUp(device) {
 }
 
 // ===== 状态轮询 =====
-setInterval(()=>{
+function fetchStatus() {
     fetch('/api/status').then(r=>r.json()).then(d=>{
         setOnline();
         document.getElementById('wifi-rssi').innerText = '📶 ' + d.rssi + 'dBm';
@@ -636,8 +681,12 @@ setInterval(()=>{
             maxInput.value = d.servo3_max;
             document.getElementById('s3-max-val').innerText = d.servo3_max + '°';
         }
-    }).catch(()=>setOffline());
-}, 200);
+    }).catch(()=>setOffline())
+    .finally(()=>{
+        setTimeout(fetchStatus, 200);
+    });
+}
+fetchStatus();
 
 function sendMaxAngle() {
     const maxA = +document.getElementById('s3-max').value;

@@ -26,12 +26,14 @@ uint64_t lastCmdSeq = 0;
 
 // 处理首页请求
 void handleRoot() {
+    server.sendHeader("Connection", "close");
     server.send(200, "text/html", web_ui_html);
 }
 
 // 处理控制API请求
 void handleControl() {
     if (server.method() != HTTP_POST) {
+        server.sendHeader("Connection", "close");
         server.send(405, "application/json", "{\"error\":\"Method Not Allowed\"}");
         return;
     }
@@ -43,6 +45,7 @@ void handleControl() {
     DeserializationError error = deserializeJson(doc, body);
     if (error) {
         Serial.printf("[API] JSON解析失败: %s\n", error.c_str());
+        server.sendHeader("Connection", "close");
         server.send(400, "application/json", "{\"error\":\"Invalid JSON\"}");
         return;
     }
@@ -50,6 +53,7 @@ void handleControl() {
     uint64_t seq = doc["seq"] | 0ULL;
     if (seq > 0) {
         if (seq <= lastCmdSeq) {
+            server.sendHeader("Connection", "close");
             server.send(200, "application/json", "{\"status\":\"ignored_old_seq\"}");
             return;
         }
@@ -84,6 +88,7 @@ void handleControl() {
         else motorControl.stopServo3();
     }
 
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", "{\"status\":\"ok\"}");
 }
 
@@ -101,11 +106,13 @@ void handleStatus() {
     
     String response;
     serializeJson(doc, response);
+    server.sendHeader("Connection", "close");
     server.send(200, "application/json", response);
 }
 
 // 处理未匹配的请求（如 /favicon.ico）
 void handleNotFound() {
+    server.sendHeader("Connection", "close");
     server.send(404, "text/plain", "Not Found");
 }
 
@@ -185,6 +192,7 @@ void setup() {
         server.sendHeader("Access-Control-Allow-Origin", "*");
         server.sendHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
         server.sendHeader("Access-Control-Allow-Headers", "Content-Type");
+        server.sendHeader("Connection", "close");
         server.send(204);
     });
 
