@@ -266,7 +266,6 @@ const char* web_ui_html = R"rawliteral(
             <span id="gamepad-status">🎮 未连接</span>
         </div>
         <div class="wifi-info">
-            <span id="wake-status" onclick="reqWakeLock()" style="cursor:pointer" title="点击尝试屏幕常亮">💡 --</span>
             <span id="wifi-rssi">📶 --</span>
             <span id="wifi-uptime">⏱ 0s</span>
         </div>
@@ -576,66 +575,6 @@ function startBind(id) {
 
 // 页面加载时读取配置
 loadMapping();
-
-// ===== 屏幕常亮 (Wake Lock API + Video Fallback) =====
-let wakeLock = null;
-let noSleepVideo = null;
-
-async function reqWakeLock() {
-    // 现代浏览器支持 WakeLock API
-    if ('wakeLock' in navigator) {
-        try {
-            wakeLock = await navigator.wakeLock.request('screen');
-            updateWakeStatus(true, '常亮 (API)');
-            wakeLock.addEventListener('release', () => {
-                updateWakeStatus(false, '解除');
-                wakeLock = null;
-            });
-            return;
-        } catch (err) {
-            console.warn('WakeLock API failed, trying fallback...', err);
-        }
-    }
-    
-    // 降级方案：播放隐藏的无声视频来阻止息屏 (兼容老浏览器和iOS)
-    if (!noSleepVideo) {
-        noSleepVideo = document.createElement('video');
-        noSleepVideo.setAttribute('playsinline', '');
-        noSleepVideo.setAttribute('muted', '');
-        noSleepVideo.setAttribute('loop', '');
-        // 一个极小的透明 webm 视频 base64
-        noSleepVideo.src = "data:video/webm;base64,GkXfo0AgQoaBAUL3gQFC8oEEQvOBCEKCQAR3ZWJtQoeBAkKFgQIYU4BnQQBRW5XAN4FOgQBRWxFvQU2Bg0FkYQEAQQAQcQEAWkF/uYFC4oEQQoZBBkOFgQFAjIEOQWECg8WBAUCLgoPjQQVAg2aBADh1Y6EBAEGxgQBUw0EEQoRCA0GAAAEBQUCAAUFRwIEBQUGAQEDigYEUQYiBgEAAAX//8AECmYIBAQkZCEl2A0EAAICAAQAEgIABAQAAgQGBAEAAg4OAAQEAQoOCAoEDQYIBQIECgQMBgoEA";
-        document.body.appendChild(noSleepVideo);
-        noSleepVideo.style.position = 'absolute';
-        noSleepVideo.style.width = '1px';
-        noSleepVideo.style.height = '1px';
-        noSleepVideo.style.opacity = '0';
-        noSleepVideo.style.pointerEvents = 'none';
-    }
-    
-    noSleepVideo.play().then(() => {
-        updateWakeStatus(true, '常亮 (兼容)');
-    }).catch((e) => {
-        updateWakeStatus(false, '常亮失败');
-        console.error('Video fallback failed:', e);
-    });
-}
-
-function updateWakeStatus(active, text) {
-    const el = document.getElementById('wake-status');
-    if(el) {
-        el.innerText = '💡 ' + text;
-        el.style.color = active ? 'var(--success)' : '';
-    }
-}
-
-// 切回前台时自动重新请求
-document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible') reqWakeLock();
-});
-// 首次交互自动请求
-document.addEventListener('click', () => { if(!wakeLock && (!noSleepVideo || noSleepVideo.paused)) reqWakeLock(); }, {once:true});
-document.addEventListener('touchstart', () => { if(!wakeLock && (!noSleepVideo || noSleepVideo.paused)) reqWakeLock(); }, {once:true});
 
 // ===== 核心API =====
 let reqSeq = Date.now();
