@@ -577,34 +577,65 @@ function startBind(id) {
 // 页面加载时读取配置
 loadMapping();
 
-// ===== 屏幕常亮 (Wake Lock API) =====
+// ===== 屏幕常亮 (Wake Lock API + Video Fallback) =====
 let wakeLock = null;
+let noSleepVideo = null;
+
 async function reqWakeLock() {
+    // 现代浏览器支持 WakeLock API
     if ('wakeLock' in navigator) {
         try {
             wakeLock = await navigator.wakeLock.request('screen');
-            document.getElementById('wake-status').innerText = '💡 常亮';
-            document.getElementById('wake-status').style.color = 'var(--success)';
+            updateWakeStatus(true, '常亮 (API)');
             wakeLock.addEventListener('release', () => {
-                document.getElementById('wake-status').innerText = '💡 解除';
-                document.getElementById('wake-status').style.color = '';
+                updateWakeStatus(false, '解除');
                 wakeLock = null;
             });
+            return;
         } catch (err) {
-            document.getElementById('wake-status').innerText = '💡 失败';
+            console.warn('WakeLock API failed, trying fallback...', err);
         }
-    } else {
-        document.getElementById('wake-status').innerText = '💡 不支持';
-        document.getElementById('wake-status').title = '您的浏览器不支持WakeLock API';
+    }
+    
+    // 降级方案：播放隐藏的无声视频来阻止息屏 (兼容老浏览器和iOS)
+    if (!noSleepVideo) {
+        noSleepVideo = document.createElement('video');
+        noSleepVideo.setAttribute('playsinline', '');
+        noSleepVideo.setAttribute('muted', '');
+        noSleepVideo.setAttribute('loop', '');
+        // 一个极小的透明 webm 视频 base64
+        noSleepVideo.src = "data:video/webm;base64,GkXfo0AgQoaBAUL3gQFC8oEEQvOBCEKCQAR3ZWJtQoeBAkKFgQIYU4BnQQBRW5XAN4FOgQBRWxFvQU2Bg0FkYQEAQQAQcQEAWkF/uYFC4oEQQoZBBkOFgQFAjIEOQWECg8WBAUCLgoPjQQVAg2aBADh1Y6EBAEGxgQBUw0EEQoRCA0GAAAEBQUCAAUFRwIEBQUGAQEDigYEUQYiBgEAAAX//8AECmYIBAQkZCEl2A0EAAICAAQAEgIABAQAAgQGBAEAAg4OAAQEAQoOCAoEDQYIBQIECgQMBgoEA";
+        document.body.appendChild(noSleepVideo);
+        noSleepVideo.style.position = 'absolute';
+        noSleepVideo.style.width = '1px';
+        noSleepVideo.style.height = '1px';
+        noSleepVideo.style.opacity = '0';
+        noSleepVideo.style.pointerEvents = 'none';
+    }
+    
+    noSleepVideo.play().then(() => {
+        updateWakeStatus(true, '常亮 (兼容)');
+    }).catch((e) => {
+        updateWakeStatus(false, '常亮失败');
+        console.error('Video fallback failed:', e);
+    });
+}
+
+function updateWakeStatus(active, text) {
+    const el = document.getElementById('wake-status');
+    if(el) {
+        el.innerText = '💡 ' + text;
+        el.style.color = active ? 'var(--success)' : '';
     }
 }
+
 // 切回前台时自动重新请求
 document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible') reqWakeLock();
 });
 // 首次交互自动请求
-document.addEventListener('click', () => { if(!wakeLock) reqWakeLock(); }, {once:true});
-document.addEventListener('touchstart', () => { if(!wakeLock) reqWakeLock(); }, {once:true});
+document.addEventListener('click', () => { if(!wakeLock && (!noSleepVideo || noSleepVideo.paused)) reqWakeLock(); }, {once:true});
+document.addEventListener('touchstart', () => { if(!wakeLock && (!noSleepVideo || noSleepVideo.paused)) reqWakeLock(); }, {once:true});
 
 // ===== 核心API =====
 let reqSeq = Date.now();
