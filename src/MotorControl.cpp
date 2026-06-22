@@ -185,6 +185,7 @@ void MotorControl::setTTMotor(int dir, int speed, unsigned long duration_ms) {
         return;
     }
 
+    ttBrakeStopTime = 0; // 清除可能存在的刹车定时器
     ttDir = dir;
     ttMotorRunning = true;
     if (duration_ms > 0) {
@@ -195,27 +196,12 @@ void MotorControl::setTTMotor(int dir, int speed, unsigned long duration_ms) {
 }
 
 void MotorControl::stopTTMotor() {
-    if (!ttMotorRunning && ttBrakeStopTime == 0) {
-        ledcWrite(MOTOR_CH1, 0);
-        ledcWrite(MOTOR_CH2, 0);
-        return;
-    }
-
-    // 采用主动反接刹车 (Plug Braking) 防止滑行
-    if (ttDir == 1) {
-        ledcWrite(MOTOR_CH1, 0);
-        ledcWrite(MOTOR_CH2, 255); // 反向全速
-        ttBrakeStopTime = millis() + 40; 
-    } else if (ttDir == -1) {
-        ledcWrite(MOTOR_CH1, 255);
-        ledcWrite(MOTOR_CH2, 0); // 反向全速
-        ttBrakeStopTime = millis() + 40; 
-    } else {
-        ledcWrite(MOTOR_CH1, 0);
-        ledcWrite(MOTOR_CH2, 0);
-        ttBrakeStopTime = 0;
-    }
+    // 移除主动反接刹车，改为空闲滑行/自然阻力刹车。
+    // 反接刹车会导致瞬间电流激增达1.5A以上，极易引发电源欠压(Brownout)导致ESP32不断重启死机！
+    ledcWrite(MOTOR_CH1, 0);
+    ledcWrite(MOTOR_CH2, 0);
     
+    ttBrakeStopTime = 0;
     ttMotorRunning = false;
     ttDir = 0;
 }
