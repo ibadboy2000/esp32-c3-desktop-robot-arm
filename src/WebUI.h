@@ -660,10 +660,12 @@ fetchStatus();
 
 function sendMaxAngle() {
     const maxA = +document.getElementById('s3-max').value;
-    fetch('/api/control', {
-        method:'POST', headers:{'Content-Type':'application/json'},
-        body: JSON.stringify({device:'servo3', action:'setmax', value:maxA})
-    }).then(r=>{if(!r.ok)console.error('API error');}).catch(()=>setOffline());
+    document.getElementById('s3-max-val').innerText = maxA + '°';
+    
+    // 接入防堵塞队列，防止滑动条高频触发导致服务器崩溃
+    let seq = reqSeq++;
+    apiQueue = {device:'servo3', action:'setmax', value:maxA, seq:seq};
+    processApiQueue();
 }
 
 // 阻止触摸默认
