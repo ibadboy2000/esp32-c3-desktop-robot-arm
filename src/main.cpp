@@ -60,31 +60,31 @@ void handleControl() {
         lastCmdSeq = seq;
     }
 
-    const char* device = doc["device"] | "";
-    const char* action = doc["action"] | "";
+    String device = doc["device"] | "";
+    String action = doc["action"] | "";
     int speed = doc["speed"] | 255;
     unsigned long duration = doc["duration"] | 0;
 
     Serial.printf("[API] device=%s action=%s speed=%d duration=%lu\n",
-                  device, action, speed, duration);
+                  device.c_str(), action.c_str(), speed, duration);
 
-    if (strcmp(device, "tt") == 0) {
-        if (strcmp(action, "up") == 0) motorControl.setTTMotor(1, speed, duration);
-        else if (strcmp(action, "down") == 0) motorControl.setTTMotor(-1, speed, duration);
+    if (device == "tt") {
+        if (action == "up") motorControl.setTTMotor(1, speed, duration);
+        else if (action == "down") motorControl.setTTMotor(-1, speed, duration);
         else motorControl.stopTTMotor();
-    } else if (strcmp(device, "servo1") == 0) {
-        if (strcmp(action, "left") == 0) motorControl.setServo1Direction(-1, speed, duration);
-        else if (strcmp(action, "right") == 0) motorControl.setServo1Direction(1, speed, duration);
+    } else if (device == "servo1") {
+        if (action == "left") motorControl.setServo1Direction(-1, speed, duration);
+        else if (action == "right") motorControl.setServo1Direction(1, speed, duration);
         else motorControl.setServo1Direction(0);
-    } else if (strcmp(device, "servo2") == 0) {
-        if (strcmp(action, "left") == 0) motorControl.setServo2Direction(-1, speed, duration);
-        else if (strcmp(action, "right") == 0) motorControl.setServo2Direction(1, speed, duration);
+    } else if (device == "servo2") {
+        if (action == "left") motorControl.setServo2Direction(-1, speed, duration);
+        else if (action == "right") motorControl.setServo2Direction(1, speed, duration);
         else motorControl.setServo2Direction(0);
-    } else if (strcmp(device, "servo3") == 0) {
-        if (strcmp(action, "left") == 0) motorControl.setServo3Direction(-1, speed);
-        else if (strcmp(action, "right") == 0) motorControl.setServo3Direction(1, speed);
-        else if (strcmp(action, "center") == 0) { motorControl.stopServo3(); motorControl.setServo3Angle(90); }
-        else if (strcmp(action, "setmax") == 0) { int maxA = doc["value"] | 160; motorControl.setServo3MaxAngle(maxA); }
+    } else if (device == "servo3") {
+        if (action == "left") motorControl.setServo3Direction(-1, speed);
+        else if (action == "right") motorControl.setServo3Direction(1, speed);
+        else if (action == "center") { motorControl.stopServo3(); motorControl.setServo3Angle(90); }
+        else if (action == "setmax") { int maxA = doc["value"] | 160; motorControl.setServo3MaxAngle(maxA); }
         else motorControl.stopServo3();
     }
 
@@ -104,8 +104,8 @@ void handleStatus() {
     doc["s2_dir"] = motorControl.servo2Dir;
     doc["s3_dir"] = motorControl.servo3Dir;
     
-    char response[256];
-    serializeJson(doc, response, sizeof(response));
+    String response;
+    serializeJson(doc, response);
     server.sendHeader("Connection", "close");
     server.send(200, "application/json", response);
 }
@@ -225,6 +225,5 @@ void loop() {
         }
     }
 
-    // 喂狗并让出时间片给底层 WiFi 任务，防止看门狗复位并降低断流率
-    vTaskDelay(2 / portTICK_PERIOD_MS);
+    delay(2);
 }
